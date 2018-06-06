@@ -1,0 +1,21 @@
+{
+  "name": "crawlkun",
+  "version": "0.0.0",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w"
+  },
+  "bin": "./dist/bin.js",
+  "main": "./dist/index.js",
+  "dependencies": {
+    "ora": "^2.1.0",
+    "puppeteer": "^1.4.0",
+    "yargs": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/ora": "^1.3.4",
+    "@types/puppeteer": "^1.3.2",
+    "@types/yargs": "^11.0.0",
+    "typescript": "^2.9.1"
+  }
+}
