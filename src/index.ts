@@ -20,13 +20,19 @@ export interface CrawlParams {
   interval?: number;
   connections?: number;
   retryCount?: number;
+  ignoreTrailingSlash?: boolean;
+  ignoreQueryParams?: boolean;
+  ignoreHash?: boolean;
 }
 
-export const defaultCrawlPamrams: CrawlParams = {
+export const defaultCrawlParams: CrawlParams = {
   url: "",
   interval: 500,
   connections: 1,
   retryCount: 5,
+  ignoreTrailingSlash: true,
+  ignoreQueryParams: true,
+  ignoreHash: true,
 };
 
 export type CrawlHooks<T1, T2, T3, T4> = () =>
@@ -55,10 +61,10 @@ async function collectUrls(baseUrl: string) {
   return [...document.querySelectorAll("a")].map(el => el.href).filter(s => s.startsWith(baseUrl));
 }
 
-function normalizeUrl(s: string) {
-  s = s.split("?").shift() as string;
-  s = s.split("#").shift() as string;
-  if (/\/$/.test(s)) s = s.slice(0, -1);
+function normalizeUrl(s: string, params: CrawlParams) {
+  if (params.ignoreQueryParams) s = s.split("?").shift() as string;
+  if (params.ignoreHash) s = s.split("#").shift() as string;
+  if (params.ignoreTrailingSlash && /\/$/.test(s)) s = s.slice(0, -1);
   return s;
 }
 
@@ -96,7 +102,7 @@ class Crawler {
     let retryCount = 0;
     while (retryCount < (this.params.retryCount as number)) {
       try {
-        await this.page.goto(url, { timeout: 5000 + Math.pow(2, retryCount) * 1000, waitUntil: "networkidle0" });
+        await this.page.goto(url, { timeout: 5000 + Math.pow(2, retryCount) * 1000, waitUntil: "networkidle2" });
         break;
       } catch (e) {
         retryCount++;
@@ -114,8 +120,8 @@ class Crawler {
     // }
     this.streams.data.push(JSON.stringify(o));
     const urls = (await this.page.evaluate(collectUrls, this.params.url)).filter((s: string) => {
-      if (!this.urlMap[normalizeUrl(s)]) {
-        this.urlMap[normalizeUrl(s)] = true;
+      if (!this.urlMap[normalizeUrl(s, this.params)]) {
+        this.urlMap[normalizeUrl(s, this.params)] = true;
         return true;
       } else {
         return false;
@@ -164,10 +170,12 @@ export async function crawl<T1 = {}, T2 = {}, T3 = {}, T4 = {}>(
 ): Promise<{ data: Readable; notify: Readable }> {
   const data = new Readable({ read() {} });
   const notify = new Readable({ read() {} });
-  const browser = await puppeteer.launch();
+  const browser = await puppeteer.launch({
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-http2"],
+  });
   const queue: string[] = [params.url];
   const urlMap: { [url: string]: boolean } = {};
-  urlMap[normalizeUrl(params.url)] = true;
+  urlMap[normalizeUrl(params.url, params)] = true;
 
   const exit = async (message = "Finished!") => {
     notify.push(JSON.stringify({ finished: message }));

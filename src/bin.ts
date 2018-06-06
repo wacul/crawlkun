@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { crawl, CrawlResult, CrawlNotify, defaultCrawlPamrams } from "./index";
+import { crawl, CrawlResult, CrawlNotify, defaultCrawlParams, CrawlParams } from "./index";
 import { Stream, Transform, TransformCallback } from "stream";
 import * as yargs from "yargs";
 import * as fs from "fs";
@@ -18,17 +18,19 @@ const argv = yargs
     alias: "i",
     describe: "Set an intaval time of crawling.",
     type: "string",
-    default: defaultCrawlPamrams.interval,
+    default: defaultCrawlParams.interval,
   })
   .option("connections", {
     alias: "c",
     describe: "Set a length of connetions",
-    default: defaultCrawlPamrams.connections,
+    type: "number",
+    default: defaultCrawlParams.connections,
   })
-  .options("retry", {
+  .options("retry-count", {
     alias: "r",
     describe: "Set a retry count",
-    default: defaultCrawlPamrams.retryCount,
+    type: "number",
+    default: defaultCrawlParams.retryCount,
   })
   .option("out", {
     alias: "o",
@@ -36,12 +38,28 @@ const argv = yargs
     type: "string",
     required: true,
   })
+  .options("ignore-trailing-slash", {
+    describe: "Ignore trailing slash.",
+    type: "boolean",
+    default: defaultCrawlParams.ignoreTrailingSlash,
+  })
+  .options("ignore-query-params", {
+    describe: "Ignore query paramaters.",
+    type: "boolean",
+    default: defaultCrawlParams.ignoreQueryParams,
+  })
+  .options("ignore-hash", {
+    describe: "Ignore url hash.",
+    type: "boolean",
+    default: defaultCrawlParams.ignoreHash,
+  })
   .help("h").argv;
 
 if (!argv._.length) {
-  yargs.showHelp();
+  console.log(argv.retryCount);
+  // yargs.showHelp();
 } else {
-  crawl({ url: argv._[0], interval: argv.interval, connections: argv.connections }).then(streams => {
+  crawl({ url: argv._[0], ...argv } as CrawlParams).then(streams => {
     const fileWriter = fs.createWriteStream(argv.out, "utf8");
     const spinner = ora("Start crawling").start();
     streams.notify.on("data", (chunk: string) => {
