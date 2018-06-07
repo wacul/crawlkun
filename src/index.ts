@@ -35,7 +35,7 @@ export const defaultCrawlParams: CrawlParams = {
   ignoreHash: true,
 };
 
-export type CrawlHooks<T1, T2, T3, T4> = () =>
+export type CrawlHooks<T1 = {}, T2 = {}, T3 = {}, T4 = {}> = () =>
   | [() => T1]
   | [() => T1, () => T2]
   | [() => T1, () => T2, () => T3]
@@ -79,6 +79,7 @@ class Crawler {
     private urlMap: { [url: string]: boolean },
     private streams: { data: Readable; notify: Readable },
     private record: { processed: number; sum: number },
+    private hooks?: CrawlHooks,
   ) {}
 
   async start() {
@@ -113,12 +114,12 @@ class Crawler {
     }
 
     const o = { url, ...(await this.page.evaluate(getTitleAndDescription)) };
-    // if (Array.isArray(hooks)) {
-    //   for (let i = 0; i < hooks.length; ++i) {
-    //     Object.assign(o, await page.evaluate(hooks[i]));
-    //   }
-    // }
-    this.streams.data.push(JSON.stringify(o));
+    if (Array.isArray(this.hooks)) {
+      for (let i = 0; i < this.hooks.length; ++i) {
+        Object.assign(o, await this.page.evaluate(this.hooks[i]));
+      }
+    }
+    this.streams.data.push(o);
     const urls = (await this.page.evaluate(collectUrls, this.params.url)).filter((s: string) => {
       if (!this.urlMap[normalizeUrl(s, this.params)]) {
         this.urlMap[normalizeUrl(s, this.params)] = true;
@@ -134,12 +135,10 @@ class Crawler {
   }
 
   private notify() {
-    this.streams.notify.push(
-      JSON.stringify({
-        queued: this.queue.length,
-        ...this.record,
-      }),
-    );
+    this.streams.notify.push({
+      queued: this.queue.length,
+      ...this.record,
+    });
   }
 }
 
@@ -168,8 +167,8 @@ export async function crawl<T1 = {}, T2 = {}, T3 = {}, T4 = {}>(
   params: CrawlParams,
   hooks?: CrawlHooks<T1, T2, T3, T4>,
 ): Promise<{ data: Readable; notify: Readable }> {
-  const data = new Readable({ read() {} });
-  const notify = new Readable({ read() {} });
+  const data = new Readable({ objectMode: true, read() {} });
+  const notify = new Readable({ objectMode: true, read() {} });
   const browser = await puppeteer.launch({
     args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-http2"],
   });
@@ -178,7 +177,7 @@ export async function crawl<T1 = {}, T2 = {}, T3 = {}, T4 = {}>(
   urlMap[normalizeUrl(params.url, params)] = true;
 
   const exit = async (message = "Finished!") => {
-    notify.push(JSON.stringify({ finished: message }));
+    notify.destroy();
     await browser.close();
     process.exit();
   };
@@ -191,7 +190,7 @@ export async function crawl<T1 = {}, T2 = {}, T3 = {}, T4 = {}>(
   const streams = { data, notify };
   const record = { processed: 0, sum: 1 };
   const crawlers = Array.from({ length: params.connections as number }).map(
-    () => new Crawler(params, browser, queue, urlMap, streams, record),
+    () => new Crawler(params, browser, queue, urlMap, streams, record, hooks),
   );
 
   const runner = new CrawlersRunner(crawlers);
